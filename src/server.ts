@@ -53,22 +53,42 @@ function createHttp(
   application.get("/login",
     (req, res) => {
       console.log("/login");
-      handleLogin(configuration, oidcClient, req, res)
+      try {
+        handleLogin(configuration, oidcClient, req, res)
+      } catch (error) {
+        console.log("  ", error);
+        res.send();
+      }
     });
   application.get("/callback",
     (req, res) => {
       console.log("/callback");
-      handleCaaisCallback(configuration, oidcClient, req, res)
+      try {
+        handleCaaisCallback(configuration, oidcClient, req, res)
+      } catch (error) {
+        console.log("  ", error);
+        res.send();
+      }
     });
   application.get("/logout",
     (req, res) => {
       console.log("/logout");
-      handleLogout(configuration, oidcClient, req, res)
+      try {
+        handleLogout(configuration, oidcClient, req, res)
+      } catch (error) {
+        console.log("  ", error);
+        res.send();
+      }
     });
   application.get("/authenticate",
     (req, res) => {
       console.log("/authenticate");
-      handleAuthenticate(configuration, oidcClient, req, res)
+      try {
+        handleAuthenticate(configuration, oidcClient, req, res)
+      } catch (error) {
+        console.log("  ", error);
+        res.send();
+      }
     });
 
   // TODO : Handle 404 codes.
@@ -206,7 +226,7 @@ async function handleCaaisCallback(
   session.caais.idToken = tokens.id_token;
   session.caais.refreshToken = tokens.refresh_token;
 
-  session.headers["x-caais-token"]= JSON.stringify({
+  session.headers["x-caais-token"] = JSON.stringify({
     authenticated: true,
     user: {
       username: userInfo.username,
