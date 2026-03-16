@@ -1,0 +1,25 @@
+{
+  "name": "caais-middleware",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx ./src/server.ts",
+    "dev": "nodemon ./src/server.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "helmet": "^8.1.0",
+    "tsx": "^4.21.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.18.2",
+    "@types/node": "^25.2.3",
+    "openid-client": "^6.8.2",
+    "typescript": "^5.9.3",
+    "undici": "^7.21.0"
+  }
+}
