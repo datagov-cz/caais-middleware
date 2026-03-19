@@ -51,46 +51,18 @@ function createHttp(
 
   configureSession(configuration, application);
 
-  application.get("/", (req, res) => {
-    res.send("CAAIS is listening.");
-  });
+  application.get("/login", (req, res) => withErrorHandling(res,
+    () => handleLogin(configuration, oidcClient, req, res)));
 
-  application.get("/login",
-    (req, res, next) => {
-      console.log("/login");
-      handleLogin(configuration, oidcClient, req, res).catch(error => {
-        console.error("  ", error);
-        res.status(500).send();
-      });
-    });
-  application.get("/callback",
-    (req, res, next) => {
-      console.log("/callback");
-      handleCaaisCallback(configuration, oidcClient, req, res).catch(error => {
-        console.error("  ", error);
-        res.status(500).send();
-      });
-    });
-  application.get("/logout",
-    (req, res, next) => {
-      console.log("/logout");
-      try {
-        handleLogout(configuration, oidcClient, req, res)
-      } catch (error) {
-        console.error("  ", error);
-        res.status(500).send();
-      }
-    });
-  application.get("/authenticate",
-    (req, res, next) => {
-      console.log("/authenticate");
-      handleAuthenticate(configuration, oidcClient, req, res).catch(error => {
-        console.error("  ", error);
-        res.status(500).send();
-      });
-    });
+  application.get("/callback", (req, res) => withErrorHandling(res,
+    () => handleCaaisCallback(configuration, oidcClient, req, res)));
 
-  // TODO : Handle 404 codes.
+
+  application.get("/logout", (req, res) => withErrorHandling(res,
+    () => handleLogout(configuration, oidcClient, req, res)));
+
+  application.get("/authenticate", (req, res) => withErrorHandling(res,
+    () => handleAuthenticate(configuration, oidcClient, req, res)));
 
   return application;
 }
@@ -154,18 +126,29 @@ declare module "express-session" {
 }
 
 /**
- * Validates that a redirect URL is safe (relative path or same-origin).
+ * Validates that a redirect URL is safe, relative path or same-origin.
  * Returns the sanitized URL, or an empty string if the URL is unsafe.
  */
 function sanitizeRedirectUrl(raw: string | undefined): string {
-  if (!raw || raw === "undefined") {
+  if (raw === undefined || raw === "undefined") {
     return "";
   }
-  // Allow only relative paths starting with /
+  // Allow only relative paths starting with '/'.
   if (/^\/[^/\\]/.test(raw) || raw === "/") {
     return raw;
   }
   return "";
+}
+
+async function withErrorHandling(
+  response: Response,
+  fnc: () => Promise<void>,
+) {
+  try {
+    await fnc();
+  } catch (error) {
+    response.status(500).send();
+  }
 }
 
 async function handleLogin(
@@ -209,9 +192,6 @@ async function handleLogin(
   response.redirect(authUrl.href);
 }
 
-/**
- * TODO: Handle logout callback.
- */
 async function handleCaaisCallback(
   configuration: Configuration,
   oidcClient: openid.Configuration,
@@ -269,12 +249,12 @@ async function handleCaaisCallback(
   response.redirect(redirectUrl);
 }
 
-function handleLogout(
+async function handleLogout(
   configuration: Configuration,
   oidcClient: openid.Configuration,
   request: Request,
   response: Response,
-): void {
+): Promise<void> {
   // We grab copy of the session here and clear the session.
   // This performs logout in our application no matter what.
   const { caais } = request.session as session.SessionData;
@@ -313,7 +293,7 @@ function clearSessionData(session: session.SessionData): void {
 }
 
 async function handleAuthenticate(
-  configuration: Configuration,
+  _configuration: Configuration,
   oidcClient: openid.Configuration,
   request: Request,
   response: Response,
@@ -363,7 +343,7 @@ async function refreshAccessToken(
     const tokens = await openid.refreshTokenGrant(oidcClient, refreshToken);
     return tokens;
   } catch (error) {
-    console.error("Failed to refresh token:", error);
+    console.error("Failed to refresh token", error);
     throw error;
   }
 }
