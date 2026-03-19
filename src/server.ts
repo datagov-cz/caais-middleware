@@ -301,11 +301,7 @@ async function handleAuthenticate(
   const { caais, headers } = request.session as session.SessionData;
 
   if (caais.authenticated !== true) {
-    // User is not authenticated.
-    response.header("x-caais-token", JSON.stringify({
-      authenticated: false,
-    }));
-    response.send();
+    response.status(401).send();
     return;
   }
 
@@ -322,8 +318,7 @@ async function handleAuthenticate(
     } catch (error) {
       // Token refresh failed; clear session and report unauthenticated.
       clearSessionData(request.session as any);
-      response.header("x-caais-token", JSON.stringify({ authenticated: false }));
-      response.send();
+      response.status(401).send();
       return;
     }
   }
