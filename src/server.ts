@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 import express, { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
+import helmet from "helmet";
 import * as undici from "undici";
 import * as openid from "openid-client";
 
@@ -44,6 +45,10 @@ function createHttp(
   oidcClient: openid.Configuration,
 ): Express {
   const application = express();
+
+  // Apply security headers via helmet.
+  application.use(helmet());
+
   configureSession(configuration, application);
 
   application.get("/", (req, res) => {
@@ -51,44 +56,38 @@ function createHttp(
   });
 
   application.get("/login",
-    (req, res) => {
+    (req, res, next) => {
       console.log("/login");
-      try {
-        handleLogin(configuration, oidcClient, req, res)
-      } catch (error) {
-        console.log("  ", error);
-        res.send();
-      }
+      handleLogin(configuration, oidcClient, req, res).catch(error => {
+        console.error("  ", error);
+        res.status(500).send();
+      });
     });
   application.get("/callback",
-    (req, res) => {
+    (req, res, next) => {
       console.log("/callback");
-      try {
-        handleCaaisCallback(configuration, oidcClient, req, res)
-      } catch (error) {
-        console.log("  ", error);
-        res.send();
-      }
+      handleCaaisCallback(configuration, oidcClient, req, res).catch(error => {
+        console.error("  ", error);
+        res.status(500).send();
+      });
     });
   application.get("/logout",
-    (req, res) => {
+    (req, res, next) => {
       console.log("/logout");
       try {
         handleLogout(configuration, oidcClient, req, res)
       } catch (error) {
-        console.log("  ", error);
-        res.send();
+        console.error("  ", error);
+        res.status(500).send();
       }
     });
   application.get("/authenticate",
-    (req, res) => {
+    (req, res, next) => {
       console.log("/authenticate");
-      try {
-        handleAuthenticate(configuration, oidcClient, req, res)
-      } catch (error) {
-        console.log("  ", error);
-        res.send();
-      }
+      handleAuthenticate(configuration, oidcClient, req, res).catch(error => {
+        console.error("  ", error);
+        res.status(500).send();
+      });
     });
 
   // TODO : Handle 404 codes.
@@ -106,11 +105,16 @@ function configureSession(configuration: Configuration, application: Express) {
     name: configuration.http.cookieName,
     secret: configuration.http.cookiesSecret,
     resave: false,
-    saveUninitialized: true,
+    // Only save session when it has been modified (not on every request).
+    // This prevents session store flooding and avoids creating tracking
+    // cookies for unauthenticated requests.
+    saveUninitialized: false,
     cookie: {
       maxAge: 60 * 60 * 1000, // One hour.
       httpOnly: true,
       secure: false,
+      // Restrict cross-site cookie sending to mitigate CSRF.
+      sameSite: "lax",
     },
   }));
 
@@ -149,6 +153,21 @@ declare module "express-session" {
   }
 }
 
+/**
+ * Validates that a redirect URL is safe (relative path or same-origin).
+ * Returns the sanitized URL, or an empty string if the URL is unsafe.
+ */
+function sanitizeRedirectUrl(raw: string | undefined): string {
+  if (!raw || raw === "undefined") {
+    return "";
+  }
+  // Allow only relative paths starting with /
+  if (/^\/[^/\\]/.test(raw) || raw === "/") {
+    return raw;
+  }
+  return "";
+}
+
 async function handleLogin(
   configuration: Configuration,
   oidcClient: openid.Configuration,
@@ -170,9 +189,11 @@ async function handleLogin(
   const nonce = openid.randomNonce();
   session.caais.nonce = nonce;
 
-  // Store redirect url.
-  // TODO We need a reasonable callback URL as a default.
-  session.caais.redirectUrl = String(request.query["redirect-url"]) ?? "";
+  // Store redirect url - only allow safe relative paths to prevent open redirect.
+  const rawRedirect = request.query["redirect-url"];
+  session.caais.redirectUrl = sanitizeRedirectUrl(
+    Array.isArray(rawRedirect) ? String(rawRedirect[0]) : String(rawRedirect)
+  );
 
   // Build authorization URL
   const authUrl = openid.buildAuthorizationUrl(oidcClient, {
@@ -217,14 +238,16 @@ async function handleCaaisCallback(
   const userInfo = await openid.fetchUserInfo(
     oidcClient,
     tokens.access_token,
-    //tokens.sub  // Add the subject from the token
-    openid.skipSubjectCheck // decodedPayload.sub
+    tokens.claims()?.sub,  // Verify subject claim matches the token
   );
 
   // Update state.
   session.caais.authenticated = true;
   session.caais.idToken = tokens.id_token;
   session.caais.refreshToken = tokens.refresh_token;
+  session.caais.expiresAt = tokens.expires_in
+    ? Math.floor(Date.now() / 1000) + tokens.expires_in
+    : undefined;
 
   session.headers["x-caais-token"] = JSON.stringify({
     authenticated: true,
@@ -241,8 +264,9 @@ async function handleCaaisCallback(
     }
   });
 
-  // Redirect back to the original page.
-  response.redirect(session.caais.redirectUrl!);
+  // Redirect back to the original page (already sanitized at login time).
+  const redirectUrl = session.caais.redirectUrl || "/";
+  response.redirect(redirectUrl);
 }
 
 function handleLogout(
@@ -275,7 +299,9 @@ function handleLogout(
   logoutUrl.searchParams.set("post_logout_redirect_uri",
     configuration.caais.callbackUrl);
   logoutUrl.searchParams.set("client_id", configuration.caais.clientId);
-  logoutUrl.searchParams.set("state", caais.state!);
+  // Generate a fresh state for the logout request rather than reusing the
+  // login state which may have already been consumed or invalidated.
+  logoutUrl.searchParams.set("state", openid.randomState());
   return response.redirect(logoutUrl.href);
 }
 
@@ -300,12 +326,26 @@ async function handleAuthenticate(
       authenticated: false,
     }));
     response.send();
+    return;
   }
 
   const now = Math.floor(Date.now() / 1000);
   if (caais.expiresAt && caais.expiresAt < now + 300) {
-    const newTokens = await refreshAccessToken(oidcClient, caais.refreshToken!);
-    // TODO Store new tokens ...
+    try {
+      const newTokens = await refreshAccessToken(oidcClient, caais.refreshToken!);
+      // Store refreshed tokens in the session.
+      caais.refreshToken = newTokens.refresh_token ?? caais.refreshToken;
+      caais.idToken = newTokens.id_token ?? caais.idToken;
+      caais.expiresAt = newTokens.expires_in
+        ? Math.floor(Date.now() / 1000) + newTokens.expires_in
+        : caais.expiresAt;
+    } catch (error) {
+      // Token refresh failed; clear session and report unauthenticated.
+      clearSessionData(request.session as any);
+      response.header("x-caais-token", JSON.stringify({ authenticated: false }));
+      response.send();
+      return;
+    }
   }
 
   // Send headers to the client.

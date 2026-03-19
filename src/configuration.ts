@@ -28,7 +28,7 @@ const ConfigurationSchema = z.object({
      * A secret with minimum length of 32 characters.
      * We use this to sign the cookies.
      */
-    cookiesSecret: z.string(),
+    cookiesSecret: z.string().min(32),
   }),
   /**
    * CAAIS configuration.
@@ -41,11 +41,11 @@ const ConfigurationSchema = z.object({
     /**
      * CAAIS server URL.
      */
-    hostUrl: z.string(),
+    hostUrl: z.string().url(),
     /**
      * CAAIS callback redirect URL.
      */
-    callbackUrl: z.string(),
+    callbackUrl: z.string().url(),
     /**
      * Certificate.
      */
@@ -67,7 +67,7 @@ const ConfigurationSchema = z.object({
      * CAAIS login endpoint.
      * We redirect user to this endpoint for login
      */
-    loginEndpointUrl: z.string(),
+    loginEndpointUrl: z.string().url(),
     /**
      * CAAIS token source endpoint from which we get the security token.
      */
