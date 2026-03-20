@@ -29,6 +29,11 @@ const ConfigurationSchema = z.object({
      * We use this to sign the cookies.
      */
     cookiesSecret: z.string().min(32),
+    /**
+     * A secret with minimum length of 32 characters used to sign
+     * the x-caais-token JWT header sent to downstream services.
+     */
+    tokenSigningSecret: z.string().min(32),
   }),
   /**
    * CAAIS configuration.
@@ -85,6 +90,7 @@ export const createConfiguration = (): Configuration => {
       port: Number(env.HTTP_PORT),
       cookieName: env.HTTP_COOKIE_NAME,
       cookiesSecret: env.HTTP_COOKIE_SECRET,
+      tokenSigningSecret: env.HTTP_TOKEN_SIGNING_SECRET,
     },
     caais: {
       clientId: env.CAAIS_CLIENT_ID,

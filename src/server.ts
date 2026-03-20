@@ -5,6 +5,7 @@ import session from "express-session";
 import helmet from "helmet";
 import * as undici from "undici";
 import * as openid from "openid-client";
+import jwt from "jsonwebtoken";
 
 import { createConfiguration, Configuration } from "./configuration";
 
@@ -249,20 +250,24 @@ async function handleCaaisCallback(
     ? Math.floor(Date.now() / 1000) + tokens.expires_in
     : undefined;
 
-  session.headers["x-caais-token"] = JSON.stringify({
-    authenticated: true,
-    user: {
-      username: userInfo.username,
-      family_name: userInfo.family_name,
-      given_name: userInfo.given_name,
-      roles: (userInfo.access_roles as any)
-        ?.map((item: any) => item.access_role_code) ?? [],
+  session.headers["x-caais-token"] = jwt.sign(
+    {
+      authenticated: true,
+      user: {
+        username: userInfo.username,
+        family_name: userInfo.family_name,
+        given_name: userInfo.given_name,
+        roles: (userInfo.access_roles as any)
+          ?.map((item: any) => item.access_role_code) ?? [],
+      },
+      entity: {
+        public_identifier: userInfo.public_organization_identifier,
+        name: userInfo.legal_entity_name,
+      },
     },
-    entity: {
-      public_identifier: userInfo.public_organization_identifier,
-      name: userInfo.legal_entity_name,
-    }
-  });
+    configuration.http.tokenSigningSecret,
+    { algorithm: "HS256" },
+  );
 
   // Redirect back to the original page (already sanitized at login time).
   const redirectUrl = session.caais.redirectUrl || "/";
@@ -322,9 +327,11 @@ async function handleAuthenticate(
 
   if (caais.authenticated !== true) {
     // User is not authenticated.
-    response.header("x-caais-token", JSON.stringify({
-      authenticated: false,
-    }));
+    response.header("x-caais-token", jwt.sign(
+      { authenticated: false },
+      configuration.http.tokenSigningSecret,
+      { algorithm: "HS256" },
+    ));
     response.send();
     return;
   }
@@ -342,7 +349,11 @@ async function handleAuthenticate(
     } catch (error) {
       // Token refresh failed; clear session and report unauthenticated.
       clearSessionData(request.session as any);
-      response.header("x-caais-token", JSON.stringify({ authenticated: false }));
+      response.header("x-caais-token", jwt.sign(
+        { authenticated: false },
+        configuration.http.tokenSigningSecret,
+        { algorithm: "HS256" },
+      ));
       response.send();
       return;
     }
