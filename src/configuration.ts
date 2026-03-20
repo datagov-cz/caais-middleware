@@ -68,11 +68,14 @@ const ConfigurationSchema = z.object({
      * We redirect user to this endpoint for login
      */
     loginEndpointUrl: z.string().url(),
-    /**
-     * CAAIS token source endpoint from which we get the security token.
-     */
-    // tokenEndpointHost: z.string(),
   }),
+  token: z.object({
+    /**
+     * A secret with minimum length of 32 characters used to sign
+     * the x-caais-token JWT header sent to downstream services.
+     */
+    tokenSignSecret: z.string().min(32),
+  },)
 });
 
 export type Configuration = z.infer<typeof ConfigurationSchema>;
@@ -96,7 +99,9 @@ export const createConfiguration = (): Configuration => {
         passphrase: env.CAAIS_CERTIFICATE_PASSPHRASE,
       },
       loginEndpointUrl: env.CAAIS_LOGIN_ENDPOINT,
-
+    },
+    token: {
+      tokenSignSecret: env.TOKEN_SIGN_SECRET,
     },
   });
 };

@@ -5,6 +5,7 @@ import session from "express-session";
 import helmet from "helmet";
 import * as undici from "undici";
 import * as openid from "openid-client";
+import jwt from "jsonwebtoken";
 
 import { createConfiguration, Configuration } from "./configuration";
 
@@ -229,7 +230,10 @@ async function handleCaaisCallback(
     ? Math.floor(Date.now() / 1000) + tokens.expires_in
     : undefined;
 
-  session.headers["x-caais-token"] = JSON.stringify(createToken(userInfo));
+  session.headers["x-caais-token"] = jwt.sign(
+    createToken(userInfo), configuration.token.tokenSignSecret,
+    { algorithm: "HS256" },
+  );
 
   // Redirect back to the original page (already sanitized at login time).
   const redirectUrl = session.caais.redirectUrl || "/";
