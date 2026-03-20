@@ -199,9 +199,9 @@ async function handleCaaisCallback(
   response: Response,
 ): Promise<void> {
   const session = request.session as session.SessionData;
-
-  // TODO : We need to construct request URL here.
-  const currentUrl = new URL(configuration.caais.callbackUrl + request.url.substring(request.url.indexOf("?")));
+  const currentUrl = new URL(
+    configuration.caais.callbackUrl +
+    request.url.substring(request.url.indexOf("?")));
 
   // Exchange authorization code for tokens.
   const tokens = await openid.authorizationCodeGrant(
@@ -229,7 +229,15 @@ async function handleCaaisCallback(
     ? Math.floor(Date.now() / 1000) + tokens.expires_in
     : undefined;
 
-  session.headers["x-caais-token"] = JSON.stringify({
+  session.headers["x-caais-token"] = JSON.stringify(createToken(userInfo));
+
+  // Redirect back to the original page (already sanitized at login time).
+  const redirectUrl = session.caais.redirectUrl || "/";
+  response.redirect(redirectUrl);
+}
+
+function createToken(userInfo: openid.UserInfoResponse) {
+  return {
     authenticated: true,
     user: {
       username: userInfo.username,
@@ -242,11 +250,7 @@ async function handleCaaisCallback(
       public_identifier: userInfo.public_organization_identifier,
       name: userInfo.legal_entity_name,
     }
-  });
-
-  // Redirect back to the original page (already sanitized at login time).
-  const redirectUrl = session.caais.redirectUrl || "/";
-  response.redirect(redirectUrl);
+  }
 }
 
 async function handleLogout(
@@ -338,7 +342,7 @@ async function refreshAccessToken(
     const tokens = await openid.refreshTokenGrant(oidcClient, refreshToken);
     return tokens;
   } catch (error) {
-    console.error("Failed to refresh token", error);
+    console.error("Failed to refresh token.", error);
     throw error;
   }
 }
