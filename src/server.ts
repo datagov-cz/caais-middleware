@@ -250,8 +250,9 @@ function createToken(userInfo: openid.UserInfoResponse) {
       username: userInfo.username,
       family_name: userInfo.family_name,
       given_name: userInfo.given_name,
-      roles: (userInfo.access_roles as any)
-        ?.map((item: any) => item.access_role_code) ?? [],
+      activity_role_codes: (userInfo.activity_roles as any)
+        ?.map((item: any) => item.activity_role_codes ?? [])
+        .flat(),
     },
     entity: {
       public_identifier: userInfo.public_organization_identifier,
