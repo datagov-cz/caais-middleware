@@ -8,6 +8,7 @@ import * as openid from "openid-client";
 import jwt from "jsonwebtoken";
 
 import { createConfiguration, Configuration } from "./configuration";
+import { logger } from "./logger";
 
 (async function main() {
   const configuration = createConfiguration();
@@ -57,7 +58,6 @@ function createHttp(
 
   application.get("/callback", (req, res) => withErrorHandling(res,
     () => handleCaaisCallback(configuration, oidcClient, req, res)));
-
 
   application.get("/logout", (req, res) => withErrorHandling(res,
     () => handleLogout(configuration, oidcClient, req, res)));
@@ -159,6 +159,7 @@ async function handleLogin(
   response: Response,
 ): Promise<void> {
   const session = request.session as session.SessionData;
+  logger.trace({session: request.sessionID}, "/login");
 
   // Generate code verifier for PKCE and store it in the session.
   const codeVerifier = openid.randomPKCECodeVerifier();
@@ -199,6 +200,8 @@ async function handleCaaisCallback(
   request: Request,
   response: Response,
 ): Promise<void> {
+  logger.trace({session: request.sessionID}, "/callback");
+
   const session = request.session as session.SessionData;
   const currentUrl = new URL(
     configuration.caais.callbackUrl +
@@ -263,6 +266,8 @@ async function handleLogout(
   request: Request,
   response: Response,
 ): Promise<void> {
+  logger.trace({session: request.sessionID}, "/logout");
+
   // We grab copy of the session here and clear the session.
   // This performs logout in our application no matter what.
   const { caais } = request.session as session.SessionData;
@@ -309,12 +314,18 @@ async function handleAuthenticate(
   const { caais, headers } = request.session as session.SessionData;
 
   if (caais.authenticated !== true) {
+    logger.trace(
+      {session: request.sessionID},
+      "/authenticate 401 : Not authenticated");
     response.status(401).send();
     return;
   }
 
   const now = Math.floor(Date.now() / 1000);
-  if (caais.expiresAt && caais.expiresAt < now + 300) {
+  if (caais.expiresAt && caais.expiresAt < now) {
+    logger.trace(
+      {session: request.sessionID},
+      "/authenticate 401 : Refreshing token");
     try {
       const newTokens = await refreshAccessToken(oidcClient, caais.refreshToken!);
       // Store refreshed tokens in the session.
@@ -326,6 +337,9 @@ async function handleAuthenticate(
     } catch (error) {
       // Token refresh failed; clear session and report unauthenticated.
       clearSessionData(request.session as any);
+      logger.trace(
+        {session: request.sessionID},
+        "/authenticate 401 : Token expired");
       response.status(401).send();
       return;
     }
@@ -335,6 +349,7 @@ async function handleAuthenticate(
   for (const [name, value] of Object.entries(headers)) {
     response.header(name, value);
   }
+  logger.trace({session: request.sessionID}, "/authenticate 200");
   response.send();
 }
 
@@ -346,7 +361,7 @@ async function refreshAccessToken(
     const tokens = await openid.refreshTokenGrant(oidcClient, refreshToken);
     return tokens;
   } catch (error) {
-    console.error("Failed to refresh token.", error);
+    logger.error(error, "Failed to refresh token.");
     throw error;
   }
 }
@@ -354,6 +369,6 @@ async function refreshAccessToken(
 function startHttp(configuration: Configuration, application: Express): void {
   const port = configuration.http.port;
   application.listen(port, () => {
-    console.log(`Server is running at http://localhost:${port}/`);
+    logger.info({ host: `http://localhost:${port}/` }, "Server is running.");
   });
 }

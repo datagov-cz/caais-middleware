@@ -13,6 +13,10 @@ const __dirname = dirname(__filename);
 
 const ConfigurationSchema = z.object({
   /**
+   * True when in a develop mode.
+   */
+  development: z.boolean(),
+  /**
    * Configuration of this service HTTP interface.
    */
   http: z.object({
@@ -75,7 +79,13 @@ const ConfigurationSchema = z.object({
      * the x-caais-token JWT header sent to downstream services.
      */
     tokenSignSecret: z.string().min(32),
-  },)
+  }),
+  log: z.object({
+    /**
+     * Log level.
+     */
+    level: z.string(),
+  }),
 });
 
 export type Configuration = z.infer<typeof ConfigurationSchema>;
@@ -102,6 +112,9 @@ export const createConfiguration = (): Configuration => {
     },
     token: {
       tokenSignSecret: env.TOKEN_SIGN_SECRET,
+    },
+    log: {
+      level: env.LOG_LEVEL ?? "info",
     },
   });
 };
