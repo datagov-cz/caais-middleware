@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import { z } from "zod";
 
 // Load values from .env file and put them into process.env.
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -80,12 +80,6 @@ const ConfigurationSchema = z.object({
      */
     tokenSignSecret: z.string().min(32),
   }),
-  log: z.object({
-    /**
-     * Log level.
-     */
-    level: z.string(),
-  }),
 });
 
 export type Configuration = z.infer<typeof ConfigurationSchema>;
@@ -112,9 +106,6 @@ export const createConfiguration = (): Configuration => {
     },
     token: {
       tokenSignSecret: env.TOKEN_SIGN_SECRET,
-    },
-    log: {
-      level: env.LOG_LEVEL ?? "info",
     },
   });
 };

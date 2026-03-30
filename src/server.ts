@@ -222,7 +222,7 @@ async function handleCaaisCallback(
   const userInfo = await openid.fetchUserInfo(
     oidcClient,
     tokens.access_token,
-    tokens.claims()?.sub,  // Verify subject claim matches the token
+    (tokens.claims() as any)?.sub,  // Verify subject claim matches the token
   );
 
   // Update state.
