@@ -1,4 +1,4 @@
-FROM node:26.12.1-alpine
+FROM node:26.13.1-slim
 
 WORKDIR /opt/caais-middleware/
 COPY ./package*.json ./
